@@ -1,2 +1,2 @@
 # Arduino-AY-player
-Arduino Pro Micro project: PSG music player on AY-3-8910 chip from SD card with OLED display and control buttons
+Arduino Pro Micro project: music player with AY-3-8910 chip with OLED display and control buttons playing PSG files from SD card
