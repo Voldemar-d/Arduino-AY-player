@@ -19,3 +19,5 @@ https://github.com/greiman/SSD1306Ascii
 Frequency generator:
 https://github.com/Rick-G1/FrequencyGenerator
 
+SRAM_23LC:
+https://github.com/mattairtech/SRAM_23LC
