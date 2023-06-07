@@ -17,4 +17,5 @@ SSD1306Ascii:
 https://github.com/greiman/SSD1306Ascii
 
 Frequency generator:
-https://github.com/Rick-G1/FrequencyGenerator/tree/master
+https://github.com/Rick-G1/FrequencyGenerator
+
