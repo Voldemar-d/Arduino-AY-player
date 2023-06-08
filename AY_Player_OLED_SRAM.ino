@@ -45,8 +45,8 @@ class CStatusLed {
 CStatusLed sled;
 
 static const byte OUT_SHIFT_DATA_PIN = 7;  // -> pin 14 of 74HC595 - data input, slave in SI (DS)
-static const byte OUT_SHIFT_LATCH_PIN = 6; // -> pin 12 of 74hc595 - data output latch (ST_CP)
-static const byte OUT_SHIFT_CLOCK_PIN = 4; // -> pin 11 of 74hc595 - clock pin SCK (SH_CP)
+static const byte OUT_SHIFT_LATCH_PIN = 6; // -> pin 12 of 74HC595 - data output latch (ST_CP)
+static const byte OUT_SHIFT_CLOCK_PIN = 4; // -> pin 11 of 74HC595 - clock pin SCK (SH_CP)
 
 // bits of E/D ports, not pin numbers!
 static const byte OUT_SHIFT_DATA_BIT = 6;  // pin 7 (PE6) => DS pin 14
@@ -60,8 +60,8 @@ void setupShiftOut() {
   digitalWrite(OUT_SHIFT_LATCH_PIN, HIGH);
 }
 
-static const byte IN_SHIFT_LATCH_PIN = 8; // -> pin 1 of 74hc165 - data output latch (ST_CP)
-static const byte IN_SHIFT_CLOCK_PIN = 9; // -> pin 2 of 74hc165 - clock pin SCK (SH_CP)
+static const byte IN_SHIFT_LATCH_PIN = 8; // -> pin 1 of 74HC165 - data output latch (ST_CP)
+static const byte IN_SHIFT_CLOCK_PIN = 9; // -> pin 2 of 74HC165 - clock pin SCK (SH_CP)
 static const byte IN_SHIFT_DATA_PIN = A0; // -> pin 9 of 74HC165 - data input, slave in SI (DS)
 
 // bits of B/F ports, not pin numbers!
@@ -81,7 +81,7 @@ void setupShiftIn() {
 
 class CBtn {
   public:
-    CBtn(int nBit, byte* pbIn) {
+    CBtn(byte nBit, byte* pbIn) {
       m_bPressed = false;
       m_lastTime = 0;
       m_nBit = nBit;
@@ -103,7 +103,7 @@ class CBtn {
     CBtn() {}
     bool m_bPressed;
     unsigned long m_lastTime;
-    int m_nBit;
+    byte m_nBit;
     byte* m_pbIn;
 };
 
