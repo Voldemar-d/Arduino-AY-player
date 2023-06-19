@@ -11,6 +11,8 @@ Added:
 - shift registers: two 74hc595 for controlling AY-3-8910 via 3 pins and 74hc165 for connecting 8 buttons via 3 pins on Arduino
 - switch between audio line output and TDA7050 analog amplifier with volume potentiometer for connecting headphones
 
+Arduino sketch: AY_Player_OLED_SRAM.ino
+
 ## Needed libraries
 
 SSD1306Ascii:
@@ -21,3 +23,6 @@ https://github.com/Rick-G1/FrequencyGenerator
 
 SRAM_23LC:
 https://github.com/mattairtech/SRAM_23LC
+
+## Curcuit
+See Arduino-AY-player-circuit.png and Arduino-AY-player-circuit.pdf
