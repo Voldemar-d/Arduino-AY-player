@@ -559,7 +559,7 @@ void playNotes() {
       demoMode = !demoMode;
       showFile();
     }
-    if (bBtn7 && !btn8.Pressed()) {
+    if (bBtn7 && !btn7.Pressed()) {
       randMode = !randMode;
       showFile();
     }
