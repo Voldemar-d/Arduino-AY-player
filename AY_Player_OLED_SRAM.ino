@@ -3,7 +3,52 @@ FrequencyGenerator fg; // for Timer4 1.78 MHz
 
 #include "SSD1306Ascii.h"
 #include "SSD1306AsciiAvrI2c.h"
-SSD1306AsciiAvrI2c oled;
+
+class SSD1306TextVol : public SSD1306AsciiAvrI2c {
+  public:
+    SSD1306TextVol(byte row) : SSD1306AsciiAvrI2c() {
+      m_row = row;
+      vreset();
+    }
+    void vreset() {
+      m_A = m_B = m_C = -1;
+    }
+    void drawVol(byte volA, byte volB, byte volC) {
+      drawMeter(volA, m_A, 32);
+      drawMeter(volB, m_B, 64);
+      drawMeter(volC, m_C, 96);
+    }
+  protected:
+    void drawMeter(byte vol, int8_t& _vol, byte pos) {
+      if (vol > 15) vol = 15;
+      if (vol == _vol) return;
+      byte nv = vol + 1, i; bool bErase = false;
+      if (_vol < 0)
+        i = 0;
+      else if (vol > _vol)
+        i = _vol + 1;
+      else if (vol < _vol) {
+        nv = _vol + 1;
+        i = vol + 1;
+        bErase = true;
+      }
+      if (_vol > -1)
+        pos += i * 2;
+      for (; i < nv; i++, pos += 2) {
+        setCursor(pos, m_row);
+        if (bErase)
+          ssd1306WriteRam(0);
+        else
+          ssd1306WriteRam(0xFF ^ (0x1F >> ((i + 1) / 4)));
+      }
+      _vol = vol;
+    }
+  private:
+    byte m_row;
+    int8_t m_A, m_B, m_C;
+};
+
+SSD1306TextVol oled(24);
 #define I2C_ADDRESS 0x3C
 
 #include <SRAM_23LC.h>
@@ -98,6 +143,9 @@ class CBtn {
       }
       m_bPressed = bPressed;
       return ret;
+    }
+    void Delay(int ms) {
+      m_lastTime = millis() + ms;
     }
   protected:
     CBtn() {}
@@ -258,7 +306,7 @@ class CFileList {
 CFileList files;
 
 static const int bufSize = 300;
-bool demoMode = false, randMode = true;
+bool demoMode = false, randMode = true, bVolumeBars = true, bSwitchBars = false;
 static const int demoLen = 10000, demoFadeLen = 500;
 SdFile fp;
 byte volumeA;
@@ -452,6 +500,8 @@ void showFile() {
   oled.println("kB");
   oled.print("Name: ");
   oled.println(fname);
+  if (bVolumeBars)
+    oled.vreset();
 }
 
 void playFile(SdFile entry) {
@@ -498,13 +548,21 @@ void checkDemo() {
 
 void playNotes() {
   inBtn = in_165_byte();
-  if (btn8.Pressed()) {
-    demoMode = !demoMode;
-    showFile();
+  const bool bBtn7 = btn7.Pressed(), bBtn8 = btn8.Pressed();
+  if (bBtn7 && bBtn8) {
+    bSwitchBars = true;
+    btn7.Delay(200);
+    btn8.Delay(200);
   }
-  if (btn7.Pressed()) {
-    randMode = !randMode;
-    showFile();
+  else {
+    if (bBtn8 && !btn7.Pressed()) {
+      demoMode = !demoMode;
+      showFile();
+    }
+    if (bBtn7 && !btn8.Pressed()) {
+      randMode = !randMode;
+      showFile();
+    }
   }
   bool bNextPressed = false;
   if (btn1.Pressed()) {
@@ -576,24 +634,33 @@ ISR(TIMER1_COMPA_vect) {
 
 void displayOLED() {
   if (playbackFinished) return;
-  oled.setCursor(0, 24);
-  oled.print("                      ");
-  //
   float fprc = (fsize > 0) ? 1000.0 * float(floaded) / float(fsize) : 0;
   int np = int(fprc + 0.5);
   if (np > 1000) np = 1000;
   sprintf(fperc, "%d.%d%%", np / 10, np % 10);
   oled.setCursor(0, 24);
   oled.print(fperc);
-  //
-  oled.setCursor(32 + volumeA / 1.5, 24);
-  oled.print(">");
-  oled.setCursor((122 - volumeC / 1.5), 24);
-  oled.print("<");
-  oled.setCursor((80 + volumeB / 1.5), 24);
-  oled.print("]");
-  oled.setCursor((75 - volumeB / 1.5), 24);
-  oled.print("[");
+  if (bSwitchBars) {
+    bSwitchBars = false;
+    if (!bVolumeBars)
+      oled.clear(32, 127, 3, 4);
+    bVolumeBars = !bVolumeBars;
+    if (bVolumeBars)
+      oled.vreset();
+  }
+  if (bVolumeBars)
+    oled.drawVol(volumeA, volumeB, volumeC);
+  else {
+    oled.clear(32, 127, 3, 4);
+    oled.setCursor(32 + volumeA / 1.5, 24);
+    oled.print(">");
+    oled.setCursor((122 - volumeC / 1.5), 24);
+    oled.print("<");
+    oled.setCursor((80 + volumeB / 1.5), 24);
+    oled.print("]");
+    oled.setCursor((75 - volumeB / 1.5), 24);
+    oled.print("[");
+  }
 }
 
 void loop() {
