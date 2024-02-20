@@ -12,6 +12,11 @@ Added:
 - shift registers: two 74HC595 for controlling AY-3-8910 via 3 pins and 74HC165 for connecting 8 buttons via 3 pins on Arduino
 - switch between audio line output and TDA7050 analog amplifier with volume potentiometer for connecting headphones
 
+Update:
+
+- faster update of ABC channel volume indicators (almost no flicker) 
+- pressing both buttons 7 and 8 switches between two views of volume indicators (bars and > [ ] <)
+
 Arduino sketch: AY\_Player\_OLED\_SRAM.ino
 
 Demo video:
