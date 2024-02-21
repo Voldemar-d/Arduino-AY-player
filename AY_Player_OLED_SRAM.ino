@@ -187,7 +187,7 @@ class CBtn2 {
         if (nCurTime - m_nPress1 < BTN_BOTH_MS) return 0;
         return 1;
       }
-      else if (!m_bPress && m_bPress2) {
+      else if (!m_bPress1 && m_bPress2) {
         if (nCurTime - m_nPress2 < BTN_BOTH_MS) return 0;
         return 2;
       }
