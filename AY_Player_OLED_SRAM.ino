@@ -123,8 +123,11 @@ void setupShiftIn() {
 }
 
 #define BTN_TIMEOUT_MS 200
+#define BTN_RELEASE_MS 200
+#define BTN_BOTH_MS 100
 
 class CBtn {
+    CBtn() {}
   public:
     CBtn(byte nBit, byte* pbIn) {
       m_bPressed = false;
@@ -144,15 +147,55 @@ class CBtn {
       m_bPressed = bPressed;
       return ret;
     }
-    void Delay(int ms) {
-      m_lastTime = millis() + ms;
-    }
-  protected:
-    CBtn() {}
+  private:
     bool m_bPressed;
     unsigned long m_lastTime;
     byte m_nBit;
     byte* m_pbIn;
+};
+
+class CBtn2 {
+    CBtn2() {}
+  public:
+    CBtn2(byte nBit1, byte nBit2, byte* pbIn) {
+      m_bPress1 = m_bPress2 = false;
+      m_nLastTime1 = m_nLastTime2 = 0;
+      m_nBit1 = nBit1; m_nBit2 = nBit2;
+      m_pbIn = pbIn;
+    }
+    void CheckPress() {
+      bool bPress1 = !bitRead(*m_pbIn, m_nBit1), bPress2 = !bitRead(*m_pbIn, m_nBit2);
+      long nCurTime = millis();
+      if (bPress1 && !m_bPress1 && nCurTime - m_nLastTime1 > BTN_TIMEOUT_MS) {
+        m_nLastTime1 = nCurTime;
+        m_bPress1 = true;
+      }
+      else if (!bPress1 && m_bPress1 && nCurTime - m_nLastTime1 > BTN_RELEASE_MS)
+        m_bPress1 = false;
+      if (bPress2 && !m_bPress2 && nCurTime - m_nLastTime2 > BTN_TIMEOUT_MS) {
+        m_nLastTime2 = nCurTime;
+        m_bPress2 = true;
+      }
+      else if (!bPress2 && m_bPress2 && nCurTime - m_nLastTime2 > BTN_RELEASE_MS)
+        m_bPress2 = false;
+    }
+    byte Pressed() {
+      if (!m_bPress1 && !m_bPress2) return 0;
+      if (m_bPress1 && m_bPress2) return 3;
+      long nCurTime = millis();
+      if (m_bPress1 && !m_bPress2) {
+        if (nCurTime - m_nPress1 < BTN_BOTH_MS) return 0;
+        return 1;
+      }
+      else if (!m_bPress && m_bPress2) {
+        if (nCurTime - m_nPress2 < BTN_BOTH_MS) return 0;
+        return 2;
+      }
+    }
+  private:
+    bool m_bPress1, m_bPress2;
+    long m_nLastTime1, m_nLastTime2;
+    byte m_nBit1, m_nBit2;
 };
 
 byte inBtn = 255, outLo = 0, outHi = 0;
@@ -551,8 +594,6 @@ void playNotes() {
   const bool bBtn7 = btn7.Pressed(), bBtn8 = btn8.Pressed();
   if (bBtn7 && bBtn8) {
     bSwitchBars = true;
-    btn7.Delay(200);
-    btn8.Delay(200);
   }
   else {
     if (bBtn8 && !btn7.Pressed()) {
