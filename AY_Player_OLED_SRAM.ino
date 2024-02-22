@@ -196,15 +196,11 @@ class CBtn2 {
         else {
           const long nCurTime = millis();
           if (0 != (m_press & BTN1_MASK) && 0 == (m_press & BTN2_MASK)) {
-            if (nCurTime - m_nPressTime1 < BTN_BOTH_MS)
-              ret = 0;
-            else
+            if (nCurTime - m_nPressTime1 >= BTN_BOTH_MS)
               ret = BTN1_MASK;
           }
           else if (0 == (m_press & BTN1_MASK) && 0 != (m_press & BTN2_MASK)) {
-            if (nCurTime - m_nPressTime2 < BTN_BOTH_MS)
-              ret = 0;
-            else
+            if (nCurTime - m_nPressTime2 >= BTN_BOTH_MS)
               ret = BTN2_MASK;
           }
         }
