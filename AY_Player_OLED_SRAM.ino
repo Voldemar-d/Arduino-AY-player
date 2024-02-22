@@ -169,19 +169,19 @@ class CBtn2 {
     void CheckPress() {
       const bool bPress1 = !bitRead(*m_pbIn, m_nBit1), bPress2 = !bitRead(*m_pbIn, m_nBit2);
       const long nCurTime = millis();
-      if (bPress1 && (0 == m_press & BTN1_MASK) && nCurTime - m_nPressTime1 > BTN_TIMEOUT_MS) {
+      if (bPress1 && 0 == (m_press & BTN1_MASK) && nCurTime - m_nPressTime1 > BTN_TIMEOUT_MS) {
         m_nPressTime1 = nCurTime;
         m_press |= BTN1_MASK;
       }
-      else if (!bPress1 && (0 != m_press & BTN1_MASK))
+      else if (!bPress1 && 0 != (m_press & BTN1_MASK))
         m_press &= !BTN1_MASK;
-      if (bPress2 && (0 == m_press & BTN2_MASK) && nCurTime - m_nPressTime2 > BTN_TIMEOUT_MS) {
+      if (bPress2 && 0 == (m_press & BTN2_MASK) && nCurTime - m_nPressTime2 > BTN_TIMEOUT_MS) {
         m_nPressTime2 = nCurTime;
         m_press |= BTN2_MASK;
       }
-      else if (!bPress2 && (0 != m_press & BTN2_MASK))
+      else if (!bPress2 && 0 != (m_press & BTN2_MASK))
         m_press &= !BTN2_MASK;
-      if (m_ret != 0 && (0 == m_press & BTN12_MASK))
+      if (m_ret != 0 && 0 == (m_press & BTN12_MASK))
         m_ret = 0;
     }
     byte Pressed() {
@@ -191,13 +191,13 @@ class CBtn2 {
           ret = BTN12_MASK;
         else {
           const long nCurTime = millis();
-          if ((0 != (m_press & BTN1_MASK)) && (0 == (m_press & BTN2_MASK)) {
+          if (0 != (m_press & BTN1_MASK) && 0 == (m_press & BTN2_MASK)) {
             if (nCurTime - m_nPressTime1 < BTN_BOTH_MS)
               ret = 0;
             else
               ret = BTN1_MASK;
           }
-          else if ((0 == (m_press & BTN1_MASK)) && (0 != (m_press & BTN2_MASK)) {
+          else if (0 == (m_press & BTN1_MASK) && 0 != (m_press & BTN2_MASK)) {
             if (nCurTime - m_nPressTime2 < BTN_BOTH_MS)
               ret = 0;
             else
