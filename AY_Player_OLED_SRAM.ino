@@ -209,6 +209,7 @@ class CBtn2 {
       return ret;
     }
   private:
+    byte* m_pbIn;
     byte m_nBit1, m_nBit2, m_press, m_ret;
     long m_nPressTime1, m_nPressTime2;
 };
