@@ -1,3 +1,7 @@
+// Arduino Pro Micro project: chiptune player of PSG files from SD card
+// on AY-3-8910 chip with OLED display, SRAM for storing file names
+// and 8 buttons for switching between modes and songs
+
 #include <FrequencyGenerator.h>
 FrequencyGenerator fg; // for Timer4 1.78 MHz
 
@@ -217,7 +221,8 @@ class CBtn2 {
 byte inBtn = 255, outLo = 0, outHi = 0;
 
 CBtn btn1(0, &inBtn), btn2(1, &inBtn), btn3(2, &inBtn), btn4(3, &inBtn),
-     btn5(4, &inBtn), btn6(5, &inBtn), btn7(6, &inBtn), btn8(7, &inBtn);
+     btn5(4, &inBtn), btn6(5, &inBtn);
+CBtn2 btn78(6, 7, &inBtn);
 
 void dispMsg(const char* pstr, bool bClear = true) {
   oled.setCursor(0, 0);
@@ -607,19 +612,17 @@ void checkDemo() {
 
 void playNotes() {
   inBtn = in_165_byte();
-  const bool bBtn7 = btn7.Pressed(), bBtn8 = btn8.Pressed();
-  if (bBtn7 && bBtn8) {
+  btn78.CheckPress();
+  const byte n78 = btn78.Pressed();
+  if (BTN12_MASK == n78) // both buttons 7 and 8 pressed - switch volume indicator mode
     bSwitchBars = true;
+  else if (BTN2_MASK == n78) { // only button 8 pressed - switch demo mode
+    demoMode = !demoMode;
+    showFile();
   }
-  else {
-    if (bBtn8 && !btn7.Pressed()) {
-      demoMode = !demoMode;
-      showFile();
-    }
-    if (bBtn7 && !btn7.Pressed()) {
-      randMode = !randMode;
-      showFile();
-    }
+  else if (BTN1_MASK == n78) { // only button 7 pressed - switch random/seq mode
+    randMode = !randMode;
+    showFile();
   }
   bool bNextPressed = false;
   if (btn1.Pressed()) {
