@@ -123,8 +123,6 @@ void setupShiftIn() {
 }
 
 #define BTN_TIMEOUT_MS 200
-#define BTN_RELEASE_MS 200
-#define BTN_BOTH_MS 100
 
 class CBtn {
     CBtn() {}
@@ -154,48 +152,65 @@ class CBtn {
     byte* m_pbIn;
 };
 
+#define BTN_BOTH_MS 100
+#define BTN1_MASK 0x01
+#define BTN2_MASK 0x02
+#define BTN12_MASK 0x03
+
 class CBtn2 {
     CBtn2() {}
   public:
     CBtn2(byte nBit1, byte nBit2, byte* pbIn) {
-      m_bPress1 = m_bPress2 = false;
-      m_nLastTime1 = m_nLastTime2 = 0;
       m_nBit1 = nBit1; m_nBit2 = nBit2;
       m_pbIn = pbIn;
+      m_press = m_ret = 0;
+      m_nPressTime1 = m_nPressTime2 = 0;
     }
     void CheckPress() {
-      bool bPress1 = !bitRead(*m_pbIn, m_nBit1), bPress2 = !bitRead(*m_pbIn, m_nBit2);
-      long nCurTime = millis();
-      if (bPress1 && !m_bPress1 && nCurTime - m_nLastTime1 > BTN_TIMEOUT_MS) {
-        m_nLastTime1 = nCurTime;
-        m_bPress1 = true;
+      const bool bPress1 = !bitRead(*m_pbIn, m_nBit1), bPress2 = !bitRead(*m_pbIn, m_nBit2);
+      const long nCurTime = millis();
+      if (bPress1 && (0 == m_press & BTN1_MASK) && nCurTime - m_nPressTime1 > BTN_TIMEOUT_MS) {
+        m_nPressTime1 = nCurTime;
+        m_press |= BTN1_MASK;
       }
-      else if (!bPress1 && m_bPress1 && nCurTime - m_nLastTime1 > BTN_RELEASE_MS)
-        m_bPress1 = false;
-      if (bPress2 && !m_bPress2 && nCurTime - m_nLastTime2 > BTN_TIMEOUT_MS) {
-        m_nLastTime2 = nCurTime;
-        m_bPress2 = true;
+      else if (!bPress1 && (0 != m_press & BTN1_MASK))
+        m_press &= !BTN1_MASK;
+      if (bPress2 && (0 == m_press & BTN2_MASK) && nCurTime - m_nPressTime2 > BTN_TIMEOUT_MS) {
+        m_nPressTime2 = nCurTime;
+        m_press |= BTN2_MASK;
       }
-      else if (!bPress2 && m_bPress2 && nCurTime - m_nLastTime2 > BTN_RELEASE_MS)
-        m_bPress2 = false;
+      else if (!bPress2 && (0 != m_press & BTN2_MASK))
+        m_press &= !BTN2_MASK;
+      if (m_ret != 0 && (0 == m_press & BTN12_MASK))
+        m_ret = 0;
     }
     byte Pressed() {
-      if (!m_bPress1 && !m_bPress2) return 0;
-      if (m_bPress1 && m_bPress2) return 3;
-      long nCurTime = millis();
-      if (m_bPress1 && !m_bPress2) {
-        if (nCurTime - m_nPress1 < BTN_BOTH_MS) return 0;
-        return 1;
+      byte ret = 0;
+      if (0 == m_ret && 0 != (m_press & BTN12_MASK)) {
+        if (BTN12_MASK == (m_press & BTN12_MASK))
+          ret = BTN12_MASK;
+        else {
+          const long nCurTime = millis();
+          if ((0 != (m_press & BTN1_MASK)) && (0 == (m_press & BTN2_MASK)) {
+            if (nCurTime - m_nPressTime1 < BTN_BOTH_MS)
+              ret = 0;
+            else
+              ret = BTN1_MASK;
+          }
+          else if ((0 == (m_press & BTN1_MASK)) && (0 != (m_press & BTN2_MASK)) {
+            if (nCurTime - m_nPressTime2 < BTN_BOTH_MS)
+              ret = 0;
+            else
+              ret = BTN2_MASK;
+          }
+        }
+        m_ret = ret;
       }
-      else if (!m_bPress1 && m_bPress2) {
-        if (nCurTime - m_nPress2 < BTN_BOTH_MS) return 0;
-        return 2;
-      }
+      return ret;
     }
   private:
-    bool m_bPress1, m_bPress2;
-    long m_nLastTime1, m_nLastTime2;
-    byte m_nBit1, m_nBit2;
+    byte m_nBit1, m_nBit2, m_press, m_ret;
+    long m_nPressTime1, m_nPressTime2;
 };
 
 byte inBtn = 255, outLo = 0, outHi = 0;
