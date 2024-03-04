@@ -16,7 +16,7 @@ Added:
 Update:
 
 - faster update of ABC channel volume indicators (almost no flicker) 
-- pressing both buttons 7 and 8 switches between views of volume indicators
+- pressing both buttons 7 and 8 switches between views of volume indicators (> [] < or bars/note freq)
 
 Arduino sketch: AY\_Player\_OLED\_SRAM.ino
 
