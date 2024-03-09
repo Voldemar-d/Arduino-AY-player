@@ -6,7 +6,7 @@
 FrequencyGenerator fg; // for Timer4 1.78 MHz
 
 #include "aymeter.h"
-SSD1306TextVol oled(24);
+SSD1306TextVol oled(3); // draw volume indicator in 8-pixel row number 4 (index 3)
 #define I2C_ADDRESS 0x3C
 
 #include <SRAM_23LC.h>
@@ -174,7 +174,7 @@ CBtn btn1(0, &inBtn), btn2(1, &inBtn), btn3(2, &inBtn), btn4(3, &inBtn),
      btn5(4, &inBtn), btn6(5, &inBtn);
 CBtn2 btn78(6, 7, &inBtn);
 
-void dispMsg(const char* pstr, bool bClear = true) {
+void dispMsg(const char* pstr) {
   oled.setCursor(0, 0);
   oled.print(pstr);
 }
@@ -280,7 +280,7 @@ class CFileList {
     int getCount() const {
       return m_nFiles;
     }
-    void getFile(int index) {
+    void getFile(int index) const {
       if (index < 0 || index >= m_nFiles)
         return;
       uint32_t adr = nMaxAdr - (index + 1) * szStruct, offset = 0;
@@ -319,16 +319,17 @@ class CFileList {
 
 CFileList files;
 
-enum eVolMode {
-  eVolChars,
-  eVolBars,
-  eVolNotes,
+enum eVolMode { // A/B/C volume indicator mode:
+  eVolChars,  // > [] <
+  eVolBars,   // bars
+  eVolNotes,  // note/frequency
   eVolTotal,
 };
+static const bool bFreqTwoRows = true; // false = display note/frequency indicator in one line
 
 static const int bufSize = 300;
-bool demoMode = false, randMode = true, bSwitchBars = false;
-byte nVolMode = eVolBars;
+bool demoMode = false, randMode = true, bSwitchMeter = false;
+byte nVolMode = eVolChars;
 static const int demoLen = 10000, demoFadeLen = 500;
 SdFile fp;
 byte volumeA, volumeB, volumeC;
@@ -525,28 +526,39 @@ void showMode(bool bSetCursor) {
     oled.setCursor(0, 0);
     oled.print(fmode);
     oled.clearToEOL();
-    oled.println();
-    oled.println();
-    oled.println();
+    oled.setCursor(0, 3);
   }
   else
     oled.println(fmode);
 }
 
+void showName(bool bSetCursor) {
+  if (bSetCursor)
+    oled.setCursor(0, 1);
+  oled.print("File: ");
+  char buf[6]; sprintf(buf, "%d", fileNum + 1);
+  if (!bFreqTwoRows || (bFreqTwoRows && nVolMode < eVolNotes )) {
+    oled.print(buf);
+    oled.print("/");
+    sprintf(buf, "%d ", filesCount);
+    oled.print(buf);
+    oled.print(fsize / 1024);
+    oled.print("kB"); oled.clearToEOL();
+    oled.println();
+    oled.print("Name: ");
+  }
+  oled.print(fname); oled.clearToEOL();
+  oled.println();
+  if (eVolNotes == nVolMode && bFreqTwoRows) {
+    oled.print(buf);
+    oled.print("    ");
+  }
+}
+
 void showFile() {
   oled.clear();
   showMode(false);
-  oled.print("File: ");
-  char buf[6];
-  sprintf (buf, "%d", fileNum + 1);
-  oled.print(buf);
-  oled.print("/");
-  sprintf (buf, "%d ", filesCount);
-  oled.print(buf);
-  oled.print(fsize / 1024);
-  oled.println("kB");
-  oled.print("Name: ");
-  oled.println(fname);
+  showName(false);
   if (nVolMode > eVolChars)
     oled.vreset();
 }
@@ -598,7 +610,7 @@ void playNotes() {
   btn78.CheckPress();
   const byte n78 = btn78.Pressed();
   if (BTN12_MASK == n78) // both buttons 7 and 8 pressed - switch volume indicator mode
-    bSwitchBars = true;
+    bSwitchMeter = true;
   else if (BTN2_MASK == n78) { // only button 8 pressed - switch demo mode
     demoMode = !demoMode;
     showMode(true);
@@ -681,30 +693,31 @@ void displayOLED() {
   int np = int(fprc + 0.5);
   if (np > 1000) np = 1000;
   sprintf(fperc, "%d.%d%%", np / 10, np % 10);
-  oled.setCursor(0, 24);
+  oled.setCursor(0, 3);
   oled.print(fperc);
-  if (bSwitchBars) {
-    bSwitchBars = false;
-    oled.clear(32, 127, 3, 4);
+  if (bSwitchMeter) {
+    bSwitchMeter = false;
     nVolMode++;
     if (nVolMode >= eVolTotal)
       nVolMode = eVolChars;
     if (nVolMode > eVolChars)
       oled.vreset();
+    showName(true);
+    oled.clrMeter(eVolNotes == nVolMode && bFreqTwoRows);
   }
   if (eVolBars == nVolMode)
     oled.drawVol(volumeA, volumeB, volumeC);
   else if (eVolNotes == nVolMode)
-    oled.drawFreq2(volumeA, volumeB, volumeC, divA, divB, divC);
+    oled.drawFreq2(bFreqTwoRows, volumeA, volumeB, volumeC, divA, divB, divC);
   else {
-    oled.clear(32, 127, 3, 4);
-    oled.setCursor(32 + volumeA / 1.5, 24);
+    oled.clrMeter(eVolNotes == nVolMode && bFreqTwoRows);
+    oled.setCursor(32 + volumeA / 1.5, 3);
     oled.print(">");
-    oled.setCursor((122 - volumeC / 1.5), 24);
+    oled.setCursor((122 - volumeC / 1.5), 3);
     oled.print("<");
-    oled.setCursor((80 + volumeB / 1.5), 24);
+    oled.setCursor((80 + volumeB / 1.5), 3);
     oled.print("]");
-    oled.setCursor((75 - volumeB / 1.5), 24);
+    oled.setCursor((75 - volumeB / 1.5), 3);
     oled.print("[");
   }
 }

@@ -112,8 +112,11 @@ const uint16_t note_div[] PROGMEM = {
 class SSD1306TextVol : public SSD1306AsciiAvrI2c {
   public:
     SSD1306TextVol(byte row) : SSD1306AsciiAvrI2c() {
-      m_row = row;
+      m_row = row; // 8-pixel height row index where volume indicator must be drawn
       vreset();
+    }
+    void clrMeter(bool bTwoLines) {
+      clear(METER_LEFT, 127, bTwoLines ? 2 : 3, 3);
     }
     void vreset() {
       m_A = m_B = m_C = m_note[0] = m_note[1] = m_note[2] = -1;
@@ -130,7 +133,7 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
       drawMeter(volC, m_C, METER_LEFT + 64);
     }
     // draw notes
-    void drawFreq(byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
+    void drawFreq(bool bTwoRows, byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
       int8_t note[3];
       byte vol[3], i, cnt = getNotes(volA, volB, volC, divA, divB, divC, note, vol);
       if (cnt > 0) {
@@ -143,22 +146,22 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
                 break;
             }
             if (i >= cnt) // previous note not found - erase it
-              drawZero(val);
+              drawZero(val, bTwoRows);
           }
         }
         for (i = 0; i < cnt; i++) {
-          drawVal(note[i], vol[i]);
+          drawVal(note[i], vol[i], bTwoRows);
           m_note[i] = note[i];
         }
       }
       else if (m_cnt > 0) { // erase all previous notes
         for (i = 0; i < m_cnt; i++)
-          drawZero(m_note[i]);
+          drawZero(m_note[i], bTwoRows);
       }
       m_cnt = cnt;
     }
     // draw falling notes
-    void drawFreq2(byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
+    void drawFreq2(bool bTwoRows, byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
       int8_t note[3];
       byte vol[3], cnt = getNotes(volA, volB, volC, divA, divB, divC, note, vol),
                    i, j, k, cn, cv;
@@ -170,7 +173,7 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
             if (cn == m_Qnote[k]) { // note found - check/update volume
               if (cv > m_Qvol[k]) {
                 m_Qvol[k] = cv;
-                drawVal(cn, cv);
+                drawVal(cn, cv, bTwoRows);
               }
               break;
             }
@@ -178,11 +181,11 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
           if (j >= m_nQueueLen) { // note not found - add it to queue
             if (QUEUE_DEPTH == m_nQueueLen && m_Qvol[m_nQueuePos] > 0) {
               // erase oldest element in queue from screen
-              drawZero(m_Qnote[m_nQueuePos]);
+              drawZero(m_Qnote[m_nQueuePos], bTwoRows);
             }
             m_Qnote[m_nQueuePos] = cn;
             m_Qvol[m_nQueuePos] = cv;
-            drawVal(cn, cv);
+            drawVal(cn, cv, bTwoRows);
             if (m_nQueuePos > 0)
               m_nQueuePos--;
             else
@@ -212,11 +215,11 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
             cv >>= 1;
 #endif
             m_Qvol[k] = cv;
-            drawVal(cn, cv);
+            drawVal(cn, cv, bTwoRows);
           }
           else if (1 == cv) {
             m_Qvol[k] = 0;
-            drawZero(cn);
+            drawZero(cn, bTwoRows);
           }
         }
         int8_t notzero = -1;
@@ -328,14 +331,34 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
       }
       return cnt;
     }
-    void drawVal(byte note, byte vol) {
-      setCursor(METER_LEFT + note, m_row);
+    void drawVal(byte note, byte vol, bool bTwoRows) {
       byte val = vol;
-      if (val > 1) val >>= 1;
-      if (val > 8) val = 8;
-      ssd1306WriteRam(0xFF ^ (0xFF >> val));
+      if (bTwoRows) {
+        if (val > 16) val = 16;
+        setCursor(METER_LEFT + note, m_row - 1);
+        if (val > 8) {
+          ssd1306WriteRam(0xFF ^ (0xFF >> (val - 8)));
+          setCursor(METER_LEFT + note, m_row);
+          ssd1306WriteRam(0xFF);
+        }
+        else {
+          ssd1306WriteRam(0);
+          setCursor(METER_LEFT + note, m_row);
+          ssd1306WriteRam(0xFF ^ (0xFF >> val));
+        }
+      }
+      else {
+        setCursor(METER_LEFT + note, m_row);
+        if (val > 1) val >>= 1;
+        if (val > 8) val = 8;
+        ssd1306WriteRam(0xFF ^ (0xFF >> val));
+      }
     }
-    void drawZero(byte note) {
+    void drawZero(byte note, bool bTwoRows) {
+      if (bTwoRows) {
+        setCursor(METER_LEFT + note, m_row - 1);
+        ssd1306WriteRam(0);
+      }
       setCursor(METER_LEFT + note, m_row);
       ssd1306WriteRam(0);
     }
