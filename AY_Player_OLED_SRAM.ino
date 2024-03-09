@@ -2,6 +2,11 @@
 // on AY-3-8910 chip with OLED display, SRAM for storing file names
 // and 8 buttons for switching between modes and songs
 
+#include <EEPROM.h>
+#define SAVE_VOL_MODE 0
+#define SAVE_RAND_MODE 1
+#define SAVE_DEMO_MODE 2
+
 #include <FrequencyGenerator.h>
 FrequencyGenerator fg; // for Timer4 1.78 MHz
 
@@ -361,7 +366,19 @@ void setupTimer() { // 50 Hz
   sei();
 }
 
+void loadSettings() {
+  nVolMode = EEPROM.read(SAVE_VOL_MODE);
+  if (nVolMode >= eVolTotal)
+    nVolMode = eVolChars;
+  byte n = EEPROM.read(SAVE_RAND_MODE);
+  randMode = (n > 0);
+  n = EEPROM.read(SAVE_DEMO_MODE);
+  if (n > 1) n = 0;
+  demoMode = (n != 0);
+};
+
 void setup() {
+  loadSettings();
   setupDisplay();
   setupShiftOut();
   setupShiftIn();
@@ -614,10 +631,12 @@ void playNotes() {
   else if (BTN2_MASK == n78) { // only button 8 pressed - switch demo mode
     demoMode = !demoMode;
     showMode(true);
+    EEPROM.write(SAVE_DEMO_MODE, demoMode ? 1 : 0);
   }
   else if (BTN1_MASK == n78) { // only button 7 pressed - switch random/seq mode
     randMode = !randMode;
     showMode(true);
+    EEPROM.write(SAVE_RAND_MODE, randMode ? 1 : 0);
   }
   bool bNextPressed = false;
   if (btn1.Pressed()) {
@@ -700,6 +719,7 @@ void displayOLED() {
     nVolMode++;
     if (nVolMode >= eVolTotal)
       nVolMode = eVolChars;
+    EEPROM.write(SAVE_VOL_MODE, nVolMode);
     if (nVolMode > eVolChars)
       oled.vreset();
     showName(true);
