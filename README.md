@@ -1,7 +1,6 @@
 # Arduino-AY-player
 
-Arduino Pro Micro project: chiptune music player on AY-3-8910 chip with OLED display (SSD1306 128x32) and control buttons for playing PSG files from SD card.
-PSG files can be converted from other chuptune music formats with AY_Emul: https://bulba.untergrund.net/emulator_e.htm
+Arduino Pro Micro project: chiptune music player on AY-3-8910 chip with OLED display (SSD1306 128x32) and control buttons for playing PSG files (see below) from SD card.
 
 Based on (and great thanks to the author):
 https://www.youtube.com/watch?v=m23hZ-1JwqI
@@ -17,11 +16,14 @@ Update:
 
 - faster update of ABC channel volume indicators (almost no flicker) 
 - pressing both buttons 7 and 8 switches between views of volume indicators (> [] < or bars/note freq)
+- current playback and volume indicator modes are saved to EEPROM
 
 Arduino sketch: AY\_Player\_OLED\_SRAM.ino
 
 Demo video:
 https://youtu.be/qcmWFfHZnjQ
+
+PSG files can be converted from other chuptune music formats with AY_Emul: https://bulba.untergrund.net/emulator_e.htm
 
 ## Needed libraries
 
