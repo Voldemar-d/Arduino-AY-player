@@ -330,7 +330,6 @@ enum eVolMode { // A/B/C volume indicator mode:
   eVolNotes,  // note/frequency
   eVolTotal,
 };
-static const bool bFreqTwoRows = true; // false = display note/frequency indicator in one line
 
 static const int bufSize = 300;
 bool demoMode = false, randMode = true, bSwitchMeter = false;
@@ -554,7 +553,11 @@ void showName(bool bSetCursor) {
     oled.setCursor(0, 1);
   oled.print("File: ");
   char buf[6]; sprintf(buf, "%d", fileNum + 1);
-  if (!bFreqTwoRows || (bFreqTwoRows && nVolMode < eVolNotes )) {
+#ifdef FREQ_TWO_ROWS
+  if (nVolMode < eVolNotes) {
+#else
+  if (true) {
+#endif
     oled.print(buf);
     oled.print("/");
     sprintf(buf, "%d ", filesCount);
@@ -566,10 +569,12 @@ void showName(bool bSetCursor) {
   }
   oled.print(fname); oled.clearToEOL();
   oled.println();
-  if (eVolNotes == nVolMode && bFreqTwoRows) {
+#ifdef FREQ_TWO_ROWS
+  if (eVolNotes == nVolMode) {
     oled.print(buf);
     oled.print("    ");
   }
+#endif // FREQ_TWO_ROWS
 }
 
 void showFile() {
@@ -723,14 +728,22 @@ void displayOLED() {
     if (nVolMode > eVolChars)
       oled.vreset();
     showName(true);
-    oled.clrMeter(eVolNotes == nVolMode && bFreqTwoRows);
+#ifdef FREQ_TWO_ROWS
+    oled.clrMeter(eVolNotes == nVolMode);
+#else
+    oled.clrMeter(false);
+#endif
   }
   if (eVolBars == nVolMode)
     oled.drawVol(volumeA, volumeB, volumeC);
   else if (eVolNotes == nVolMode)
-    oled.drawFreq2(bFreqTwoRows, volumeA, volumeB, volumeC, divA, divB, divC);
+    oled.drawFreq2(volumeA, volumeB, volumeC, divA, divB, divC);
   else {
-    oled.clrMeter(eVolNotes == nVolMode && bFreqTwoRows);
+#ifdef FREQ_TWO_ROWS
+    oled.clrMeter(eVolNotes == nVolMode);
+#else
+    oled.clrMeter(false);
+#endif
     oled.setCursor(32 + volumeA / 1.5, 3);
     oled.print(">");
     oled.setCursor((122 - volumeC / 1.5), 3);
