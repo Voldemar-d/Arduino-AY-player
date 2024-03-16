@@ -23,7 +23,7 @@ Arduino sketch: AY\_Player\_OLED\_SRAM.ino
 Demo video:
 https://youtu.be/qcmWFfHZnjQ
 
-PSG files can be converted from other chuptune music formats with AY_Emul: https://bulba.untergrund.net/emulator_e.htm
+PSG files can be converted from other chuptune music formats with AY\_Emul: https://bulba.untergrund.net/emulator_e.htm
 
 ## Needed libraries
 
