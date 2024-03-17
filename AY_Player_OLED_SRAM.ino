@@ -328,6 +328,7 @@ enum eVolMode { // A/B/C volume indicator mode:
   eVolChars,  // > [] <
   eVolBars,   // bars
   eVolNotes,  // note/frequency
+  eVolFullScreen,  // fullscreen note/frequency
   eVolTotal,
 };
 
@@ -579,8 +580,10 @@ void showName(bool bSetCursor) {
 
 void showFile() {
   oled.clear();
-  showMode(false);
-  showName(false);
+  if (nVolMode != eVolFullScreen) {
+    showMode(false);
+    showName(false);
+  }
   if (nVolMode > eVolChars)
     oled.vreset();
 }
@@ -713,12 +716,14 @@ ISR(TIMER1_COMPA_vect) {
 
 void displayOLED() {
   if (playbackFinished) return;
-  float fprc = (fsize > 0) ? 1000.0 * float(floaded) / float(fsize) : 0;
-  int np = int(fprc + 0.5);
-  if (np > 1000) np = 1000;
-  sprintf(fperc, "%d.%d%%", np / 10, np % 10);
-  oled.setCursor(0, 3);
-  oled.print(fperc);
+  if (nVolMode != eVolFullScreen) {
+    float fprc = (fsize > 0) ? 1000.0 * float(floaded) / float(fsize) : 0;
+    int np = int(fprc + 0.5);
+    if (np > 1000) np = 1000;
+    sprintf(fperc, "%d.%d%%", np / 10, np % 10);
+    oled.setCursor(0, 3);
+    oled.print(fperc);
+  }
   if (bSwitchMeter) {
     bSwitchMeter = false;
     nVolMode++;
@@ -727,23 +732,25 @@ void displayOLED() {
     EEPROM.write(SAVE_VOL_MODE, nVolMode);
     if (nVolMode > eVolChars)
       oled.vreset();
-    showName(true);
+    else
+      showFile();
+    if (eVolFullScreen == nVolMode)
+      oled.clear();
+    else {
+      showName(true);
 #ifdef FREQ_TWO_ROWS
-    oled.clrMeter(eVolNotes == nVolMode);
+      oled.clrMeter(eVolNotes == nVolMode);
 #else
-    oled.clrMeter(false);
+      oled.clrMeter(false);
 #endif
+    }
   }
   if (eVolBars == nVolMode)
     oled.drawVol(volumeA, volumeB, volumeC);
-  else if (eVolNotes == nVolMode)
-    oled.drawFreq2(volumeA, volumeB, volumeC, divA, divB, divC);
+  else if (eVolNotes == nVolMode || eVolFullScreen == nVolMode)
+    oled.drawFreq2(eVolFullScreen == nVolMode, volumeA, volumeB, volumeC, divA, divB, divC);
   else {
-#ifdef FREQ_TWO_ROWS
-    oled.clrMeter(eVolNotes == nVolMode);
-#else
     oled.clrMeter(false);
-#endif
     oled.setCursor(32 + volumeA / 1.5, 3);
     oled.print(">");
     oled.setCursor((122 - volumeC / 1.5), 3);

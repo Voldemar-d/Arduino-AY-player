@@ -8,6 +8,26 @@
 // comment this line for faster note falling in drawFreq2
 #define SLOW_NOTE_FALL
 
+const byte vol_char[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x08, 0x00, 0x00,
+  0x00, 0x08, 0x00, 0x08, 0x00,
+  0x00, 0x08, 0x08, 0x08, 0x00,
+  0x00, 0x08, 0x14, 0x08, 0x00,
+  0x00, 0x08, 0x1C, 0x08, 0x00,
+  0x00, 0x1C, 0x14, 0x1C, 0x00,
+  0x00, 0x1C, 0x1C, 0x1C, 0x00,
+  0x00, 0x1C, 0x36, 0x1C, 0x00,
+  0x00, 0x1C, 0x3E, 0x1C, 0x00,
+  0x08, 0x1C, 0x3E, 0x1C, 0x08,
+  0x08, 0x3E, 0x3E, 0x3E, 0x08,
+  0x1C, 0x3E, 0x3E, 0x3E, 0x1C,
+  0x1C, 0x3E, 0x7F, 0x3E, 0x1C,
+  0x3E, 0x3E, 0x7F, 0x3E, 0x3E,
+  0x3E, 0x7F, 0x7F, 0x7F, 0x3E,
+  0x7F, 0x7F, 0x7F, 0x7F, 0x7F,
+};
+
 const uint16_t note_div[] PROGMEM = {
   4095, //26.7 Hz, A-1
   3862, //28.3 Hz, A#-1
@@ -109,6 +129,7 @@ const uint16_t note_div[] PROGMEM = {
 
 #define NOTE_COUNT 96
 #define METER_LEFT 32
+#define FS_LEFT 4
 #define QUEUE_DEPTH 32
 
 class SSD1306TextVol : public SSD1306AsciiAvrI2c {
@@ -148,22 +169,22 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
                 break;
             }
             if (i >= cnt) // previous note not found - erase it
-              drawZero(val);
+              drawZero(val, false);
           }
         }
         for (i = 0; i < cnt; i++) {
-          drawVal(note[i], vol[i]);
+          drawVal(note[i], vol[i], false);
           m_note[i] = note[i];
         }
       }
       else if (m_cnt > 0) { // erase all previous notes
         for (i = 0; i < m_cnt; i++)
-          drawZero(m_note[i]);
+          drawZero(m_note[i], false);
       }
       m_cnt = cnt;
     }
     // draw falling notes
-    void drawFreq2(byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
+    void drawFreq2(bool bFullScreen, byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
       int8_t note[3];
       byte vol[3], cnt = getNotes(volA, volB, volC, divA, divB, divC, note, vol),
                    i, j, k, cn, cv;
@@ -175,7 +196,7 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
             if (cn == m_Qnote[k]) { // note found - check/update volume
               if (cv > m_Qvol[k]) {
                 m_Qvol[k] = cv;
-                drawVal(cn, cv);
+                drawVal(cn, cv, bFullScreen);
               }
               break;
             }
@@ -183,11 +204,11 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
           if (j >= m_nQueueLen) { // note not found - add it to queue
             if (QUEUE_DEPTH == m_nQueueLen && m_Qvol[m_nQueuePos] > 0) {
               // erase oldest element in queue from screen
-              drawZero(m_Qnote[m_nQueuePos]);
+              drawZero(m_Qnote[m_nQueuePos], bFullScreen);
             }
             m_Qnote[m_nQueuePos] = cn;
             m_Qvol[m_nQueuePos] = cv;
-            drawVal(cn, cv);
+            drawVal(cn, cv, bFullScreen);
             if (m_nQueuePos > 0)
               m_nQueuePos--;
             else
@@ -217,11 +238,11 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
             cv >>= 1;
 #endif
             m_Qvol[k] = cv;
-            drawVal(cn, cv);
+            drawVal(cn, cv, bFullScreen);
           }
           else if (1 == cv) {
             m_Qvol[k] = 0;
-            drawZero(cn);
+            drawZero(cn, bFullScreen);
           }
         }
         int8_t notzero = -1;
@@ -333,10 +354,20 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
       }
       return cnt;
     }
-    void drawVal(byte note, byte vol) {
+    void drawVal(byte note, byte vol, bool bFullScreen) {
       byte val = vol;
-#ifdef FREQ_TWO_ROWS
       if (val > 16) val = 16;
+      if (bFullScreen) {
+        val *= 5;
+        setCursor(FS_LEFT + (note % 24) * 5, note / 24);
+        for (byte i = 0; i < 5; i++) {
+          ssd1306WriteRamBuf(pgm_read_byte(&vol_char[val + i]));
+          m_col++;
+        }
+        setCol(m_col);
+        return;
+      }
+#ifdef FREQ_TWO_ROWS
       setCursor(METER_LEFT + note, m_row - 1);
       if (val > 8) {
         ssd1306WriteRam(0xFF ^ (0xFF >> (val - 8)));
@@ -355,7 +386,16 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
       ssd1306WriteRam(0xFF ^ (0xFF >> val));
 #endif // FREQ_TWO_ROWS
     }
-    void drawZero(byte note) {
+    void drawZero(byte note, bool bFullScreen) {
+      if (bFullScreen) {
+        setCursor(FS_LEFT + (note % 24) * 5, note / 24);
+        for (byte i = 0; i < 5; i++) {
+          ssd1306WriteRamBuf(0);
+          m_col++;
+        }
+        setCol(m_col);
+        return;
+      }
 #ifdef FREQ_TWO_ROWS
       setCursor(METER_LEFT + note, m_row - 1);
       ssd1306WriteRam(0);
