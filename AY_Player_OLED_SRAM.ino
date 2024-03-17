@@ -557,7 +557,7 @@ void showName(bool bSetCursor) {
 #ifdef FREQ_TWO_ROWS
   if (nVolMode < eVolNotes) {
 #else
-  if (true) {
+  {
 #endif
     oled.print(buf);
     oled.print("/");

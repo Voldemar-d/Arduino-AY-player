@@ -156,7 +156,7 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
       drawMeter(volC, m_C, METER_LEFT + 64);
     }
     // draw notes
-    void drawFreq(byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
+    void drawFreq(bool bFullScreen, byte volA, byte volB, byte volC, uint16_t divA, uint16_t divB, uint16_t divC) {
       int8_t note[3];
       byte vol[3], i, cnt = getNotes(volA, volB, volC, divA, divB, divC, note, vol);
       if (cnt > 0) {
@@ -169,17 +169,17 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
                 break;
             }
             if (i >= cnt) // previous note not found - erase it
-              drawZero(val, false);
+              drawZero(val, bFullScreen);
           }
         }
         for (i = 0; i < cnt; i++) {
-          drawVal(note[i], vol[i], false);
+          drawVal(note[i], vol[i], bFullScreen);
           m_note[i] = note[i];
         }
       }
       else if (m_cnt > 0) { // erase all previous notes
         for (i = 0; i < m_cnt; i++)
-          drawZero(m_note[i], false);
+          drawZero(m_note[i], bFullScreen);
       }
       m_cnt = cnt;
     }
