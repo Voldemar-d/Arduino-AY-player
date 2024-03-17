@@ -331,7 +331,7 @@ enum eVolMode { // A/B/C volume indicator mode:
   eVolTotal,
 };
 
-static const int bufSize = 300;
+static const int bufSize = 200;
 bool demoMode = false, randMode = true, bSwitchMeter = false;
 byte nVolMode = eVolChars;
 static const int demoLen = 10000, demoFadeLen = 500;
