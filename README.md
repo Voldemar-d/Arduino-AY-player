@@ -23,6 +23,9 @@ Arduino sketch: AY\_Player\_OLED\_SRAM.ino
 Demo video:
 https://youtu.be/qcmWFfHZnjQ
 
+Video with new modes of indicator:
+https://youtu.be/EuEVkPjT0Eg
+
 PSG files can be converted from other chuptune music formats with AY\_Emul: https://bulba.untergrund.net/emulator_e.htm
 
 ## Needed libraries
