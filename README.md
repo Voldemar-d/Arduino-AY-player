@@ -42,6 +42,6 @@ PSG files can be converted from other chuptune music formats with **AY\_Emul**: 
 [https://github.com/mattairtech/SRAM_23LC](https://github.com/mattairtech/SRAM_23LC)
 
 ## Curcuit
-See Arduino-AY-player-circuit.png and Arduino-AY-player-circuit.pdf
+See 'Arduino-AY-player-circuit.png' and 'Arduino-AY-player-circuit.pdf'
 
 Update: try to remove 0.1uF capacitor connected to pin 12 of 74HC595 registers if AY-3-8910 doesn't play music.
