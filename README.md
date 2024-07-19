@@ -1,6 +1,6 @@
 # Arduino-AY-player
 
-Arduino Pro Micro project: chiptune music player on **AY-3-8910** chip with OLED display (SSD1306 128x32) and control buttons for playing PSG files (see below) from SD card.
+**Arduino Pro Micro** project: chiptune music player on **AY-3-8910** chip with OLED display (SSD1306 128x32) and control buttons for playing PSG files (see below) from SD card.
 
 ![](Arduino-AY-Player-board.jpg)
 
