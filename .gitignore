@@ -1,0 +1,18 @@
+.arduino/
+.tools/
+build/
+build-original/
+tests/*.elf
+tests/*.bin
+tests/*.symbols
+tests/playback-under-test.h
+tests/file-list-under-test.h
+tests/transport-under-test.h
+
+# Local publication notes, generated sketch copies, and diagnostic logs
+.local-publication/
+AY_Player_OLED_SRAM/
+*-log*.txt
+*.log
+ANALYSIS_RU.md
+FIXES_RU.md
