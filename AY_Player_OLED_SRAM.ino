@@ -3,6 +3,9 @@
 // and 8 buttons for switching between modes and songs
 
 #include <EEPROM.h>
+#include <util/atomic.h>
+#include "ButtonControls.h"
+#include "TrackBookmark.h"
 #define SAVE_VOL_MODE 0
 #define SAVE_RAND_MODE 1
 #define SAVE_DEMO_MODE 2
@@ -18,7 +21,7 @@ SSD1306TextVol oled(3); // draw volume indicator in 8-pixel row number 4 (index 
 #include <SdFat.h>
 static const byte SD_CS_PIN = 10, // SD card chip select (CS)
                   SRAM_CS_PIN = A2; // SRAM chip select (CS)
-static const uint32_t nMaxAdr = 0x20000, nMaxFiles = 0xFFFF;
+static const uint32_t nMaxAdr = 0x20000, nMaxFiles = 32767;
 SRAM_23LC sram(&SPI, SRAM_CS_PIN, SRAM_23LC1024);
 
 static const byte RANDOM_SEED_PIN = A1, STATUS_LED_PIN = LED_BUILTIN_TX;
@@ -68,14 +71,14 @@ void setupShiftOut() {
   digitalWrite(OUT_SHIFT_LATCH_PIN, HIGH);
 }
 
-static const byte IN_SHIFT_LATCH_PIN = 8; // -> pin 1 of 74HC165 - data output latch (ST_CP)
-static const byte IN_SHIFT_CLOCK_PIN = 9; // -> pin 2 of 74HC165 - clock pin SCK (SH_CP)
+static const byte IN_SHIFT_LATCH_PIN = 9; // -> pin 1 of 74HC165 - parallel load (PL)
+static const byte IN_SHIFT_CLOCK_PIN = 8; // -> pin 2 of 74HC165 - shift clock (CP)
 static const byte IN_SHIFT_DATA_PIN = A0; // -> pin 9 of 74HC165 - data input, slave in SI (DS)
 
 // bits of B/F ports, not pin numbers!
 static const byte IN_SHIFT_DATA_BIT = 7;  // pin A0 (PF7) => DS pin 9
-static const byte IN_SHIFT_LATCH_BIT = 4; // pin 8 (PB4) => ST_CP pin 1
-static const byte IN_SHIFT_CLOCK_BIT = 5; // pin 9 (PB5) => SH_CP pin 2
+static const byte IN_SHIFT_LATCH_BIT = 5; // pin 9 (PB5) => PL pin 1
+static const byte IN_SHIFT_CLOCK_BIT = 4; // pin 8 (PB4) => CP pin 2
 
 void setupShiftIn() {
   pinMode(IN_SHIFT_DATA_PIN, INPUT);
@@ -85,99 +88,9 @@ void setupShiftIn() {
   digitalWrite(IN_SHIFT_CLOCK_PIN, LOW);
 }
 
-#define BTN_TIMEOUT_MS 200
-
-class CBtn {
-    CBtn() {}
-  public:
-    CBtn(byte nBit, byte* pbIn) {
-      m_bPressed = false;
-      m_lastTime = 0;
-      m_nBit = nBit;
-      m_pbIn = pbIn;
-    }
-    bool Pressed() {
-      bool bPressed = !bitRead(*m_pbIn, m_nBit), ret = false;
-      if (bPressed && !m_bPressed) {
-        long nCurTime = millis();
-        if (nCurTime - m_lastTime > BTN_TIMEOUT_MS) {
-          ret = true;
-          m_lastTime = nCurTime;
-        }
-      }
-      m_bPressed = bPressed;
-      return ret;
-    }
-  private:
-    bool m_bPressed;
-    unsigned long m_lastTime;
-    byte m_nBit;
-    byte* m_pbIn;
-};
-
-#define BTN_BOTH_MS 100
-#define BTN1_MASK 0x01
-#define BTN2_MASK 0x02
-#define BTN12_MASK 0x03
-
-class CBtn2 {
-    CBtn2() {}
-  public:
-    CBtn2(byte nBit1, byte nBit2, byte* pbIn) {
-      m_nBit1 = nBit1; m_nBit2 = nBit2;
-      m_pbIn = pbIn;
-      m_press = m_ret = 0;
-      m_nPressTime1 = m_nPressTime2 = 0;
-    }
-    void CheckPress() {
-      const bool bPress1 = !bitRead(*m_pbIn, m_nBit1), bPress2 = !bitRead(*m_pbIn, m_nBit2);
-      const long nCurTime = millis();
-      if (bPress1 && 0 == (m_press & BTN1_MASK) && nCurTime - m_nPressTime1 > BTN_TIMEOUT_MS) {
-        m_nPressTime1 = nCurTime;
-        m_press |= BTN1_MASK;
-      }
-      else if (!bPress1 && 0 != (m_press & BTN1_MASK))
-        m_press &= !BTN1_MASK;
-      if (bPress2 && 0 == (m_press & BTN2_MASK) && nCurTime - m_nPressTime2 > BTN_TIMEOUT_MS) {
-        m_nPressTime2 = nCurTime;
-        m_press |= BTN2_MASK;
-      }
-      else if (!bPress2 && 0 != (m_press & BTN2_MASK))
-        m_press &= !BTN2_MASK;
-      if (m_ret != 0 && 0 == (m_press & BTN12_MASK))
-        m_ret = 0;
-    }
-    byte Pressed() {
-      byte ret = 0;
-      if (0 == m_ret && 0 != (m_press & BTN12_MASK)) {
-        if (BTN12_MASK == (m_press & BTN12_MASK))
-          ret = BTN12_MASK;
-        else {
-          const long nCurTime = millis();
-          if (0 != (m_press & BTN1_MASK) && 0 == (m_press & BTN2_MASK)) {
-            if (nCurTime - m_nPressTime1 >= BTN_BOTH_MS)
-              ret = BTN1_MASK;
-          }
-          else if (0 == (m_press & BTN1_MASK) && 0 != (m_press & BTN2_MASK)) {
-            if (nCurTime - m_nPressTime2 >= BTN_BOTH_MS)
-              ret = BTN2_MASK;
-          }
-        }
-        m_ret = ret;
-      }
-      return ret;
-    }
-  private:
-    byte* m_pbIn;
-    byte m_nBit1, m_nBit2, m_press, m_ret;
-    long m_nPressTime1, m_nPressTime2;
-};
-
 byte inBtn = 255, outLo = 0, outHi = 0;
-
-CBtn btn1(0, &inBtn), btn2(1, &inBtn), btn3(2, &inBtn), btn4(3, &inBtn),
-     btn5(4, &inBtn), btn6(5, &inBtn);
-CBtn2 btn78(6, 7, &inBtn);
+ButtonControls buttons;
+bool bSwitchMeter = false;
 
 void dispMsg(const char* pstr) {
   oled.setCursor(0, 0);
@@ -188,7 +101,8 @@ const char *supportedFileExt = ".psg";
 static const byte fileExtLen = strlen(supportedFileExt);
 static const int nTxtLen = 40;
 char fname[256], fperc[8], fmode[22];
-uint32_t fsize = 0, fnlen, floaded;
+uint32_t fsize = 0, fnlen;
+volatile uint32_t floaded = 0;
 
 // structure:
 // { uint24 offset/length, uint16 random number }
@@ -198,14 +112,20 @@ SdFat sd;
 
 class CFileList {
     uint16_t m_nFiles, m_nRandom;
+    uint16_t m_randomOffset = 0, m_randomStep = 1;
+    bool m_useSram = false;
     uint32_t m_nFreeAdrLo, m_nFreeAdrHi;
-    bool checkFile(SdFile entry) {
-      if (m_nFiles >= nMaxFiles) return false;
-      entry.getName(fname, 255);
+    bool isPlayable(SdFile& entry) const {
+      if (!entry.getName(fname, sizeof(fname))) return false;
       fsize = entry.fileSize();
       fnlen = strlen(fname);
-      bool bOK = !entry.isHidden() && !entry.isDir() && (fnlen > fileExtLen &&
-                 !strcasecmp(fname + fnlen - fileExtLen, supportedFileExt) && fsize > 0);
+      return !entry.isHidden() && !entry.isDir() && fnlen > fileExtLen &&
+             !strcasecmp(fname + fnlen - fileExtLen, supportedFileExt) && fsize > 0;
+    }
+    bool checkFile(SdFile entry) {
+      if (m_nFiles >= nMaxFiles) return false;
+      bool bOK = isPlayable(entry);
+      if (!m_useSram) return bOK;
       if (bOK) {
         if (m_nFreeAdrLo + fnlen + szStruct * 2 < m_nFreeAdrHi && fnlen > fileExtLen) {
           fnlen -= fileExtLen;
@@ -224,10 +144,24 @@ class CFileList {
       }
       return bOK;
     }
-    void FillRandom(uint16_t nNotFirst = 0)
+    void FillRandom(uint16_t nNotFirst = 0xFFFF)
     {
       const uint16_t n = m_nFiles;
       if (n < 2) return;
+      if (!m_useSram) {
+        // A coprime step visits every track once without an SRAM permutation.
+        m_randomOffset = random(n);
+        if (m_randomOffset == nNotFirst) m_randomOffset = (m_randomOffset + 1) % n;
+        m_randomStep = random(1, n);
+        for (;;) {
+          uint16_t a = m_randomStep, b = n;
+          while (b) { uint16_t r = a % b; a = b; b = r; }
+          if (a == 1) break;
+          if (++m_randomStep >= n) m_randomStep = 1;
+        }
+        m_nRandom = 0;
+        return;
+      }
       uint16_t i, j, t, v;
       uint32_t adr = nMaxAdr - szR, adr1;
       for (i = 0; i < n; i++) {
@@ -235,18 +169,18 @@ class CFileList {
         adr -= szStruct;
       }
       for (i = 0; i < n; i++) {
-        adr = nMaxAdr - szR - i * szStruct;
+        adr = nMaxAdr - szR - uint32_t(i) * szStruct;
         sram.readBlock(adr, szR, (byte*)&t); // t = a[i]
-        j = random(n) % (n - i) + i;
-        adr1 = nMaxAdr - szR - j * szStruct;
+        j = random(n - i) + i;
+        adr1 = nMaxAdr - szR - uint32_t(j) * szStruct;
         sram.readBlock(adr1, szR, (byte*)&v); // v = a[j]
         sram.writeBlock(adr, szR, (byte*)&v); // a[i] = a[j]
         sram.writeBlock(adr1, szR, (byte*)&t); // a[j] = t
       }
       adr = nMaxAdr - szR;
-      sram.readBlock(adr1, szR, (byte*)&v);
+      sram.readBlock(adr, szR, (byte*)&v);
       if (v == nNotFirst) { // swap first and last elements
-        adr1 = nMaxAdr - szR - (m_nFiles - 1) * szStruct;
+        adr1 = nMaxAdr - szR - uint32_t(m_nFiles - 1) * szStruct;
         sram.readBlock(adr1, szR, (byte*)&t);
         sram.writeBlock(adr, szR, (byte*)&t);
         sram.writeBlock(adr1, szR, (byte*)&v);
@@ -262,7 +196,20 @@ class CFileList {
       m_nFreeAdrLo = 0;
       m_nFreeAdrHi = nMaxAdr;
     }
+    void DetectSram() {
+      const byte lo[] = {0x35, 0xCA, 0x69, 0x96};
+      const byte hi[] = {0xA7, 0x58, 0xC3, 0x3C};
+      sram.writeBlock(0, 4, (void*)lo);
+      sram.writeBlock(nMaxAdr - 4, 4, (void*)hi);
+      m_useSram = true;
+      for (byte i = 0; i < 4; i++) {
+        if (sram.readByte(i) != lo[i] || sram.readByte(nMaxAdr - 4 + i) != hi[i])
+          m_useSram = false;
+      }
+    }
+    bool usesSram() const { return m_useSram; }
     void GetList() {
+      Reset();
       SdFile dir;
       if (dir.open("/", O_READ)) {
         SdFile file;
@@ -286,10 +233,26 @@ class CFileList {
       return m_nFiles;
     }
     void getFile(int index) const {
-      if (index < 0 || index >= m_nFiles)
+      fname[0] = 0;
+      if (index < 0 || uint16_t(index) >= m_nFiles)
         return;
-      uint32_t adr = nMaxAdr - (index + 1) * szStruct, offset = 0;
+      if (!m_useSram) {
+        SdFile dir, entry;
+        if (!dir.open("/", O_READ)) return;
+        int current = 0;
+        bool found = false;
+        while (entry.openNext(&dir, O_READ)) {
+          if (isPlayable(entry) && current++ == index) found = true;
+          entry.close();
+          if (found) break;
+        }
+        dir.close();
+        if (!found) fname[0] = 0;
+        return;
+      }
+      uint32_t adr = nMaxAdr - (uint32_t(index) + 1) * szStruct, offset = 0;
       fsize = fnlen = 0;
+      fname[0] = 0;
       sram.readBlock(adr, szN, (byte*)&offset);
       fnlen = offset;
       if (index > 0) {
@@ -301,6 +264,7 @@ class CFileList {
       if (0 == index)
         offset = 0;
       //
+      if (fnlen > sizeof(fname) - fileExtLen - 1 || offset + fnlen > nMaxAdr) return;
       sram.readBlock(offset, fnlen, (byte*)fname);
       fname[fnlen] = 0;
       strcat(fname, supportedFileExt);
@@ -308,13 +272,21 @@ class CFileList {
     uint16_t getRandom() {
       uint16_t rnd = 0;
       if (m_nFiles > 1) {
-        uint32_t adr = nMaxAdr - szR - szStruct * m_nRandom;
+        if (!m_useSram) {
+          if (m_nRandom >= m_nFiles) {
+            uint16_t last = (m_randomOffset + uint32_t(m_nFiles - 1) * m_randomStep) % m_nFiles;
+            FillRandom(last);
+          }
+          rnd = (m_randomOffset + uint32_t(m_nRandom++) * m_randomStep) % m_nFiles;
+          return rnd;
+        }
+        uint32_t adr = nMaxAdr - szR - uint32_t(szStruct) * m_nRandom;
         if (m_nRandom >= m_nFiles) {
-          adr = nMaxAdr - szR - szStruct * (m_nFiles - 1);
+          adr = nMaxAdr - szR - uint32_t(szStruct) * (m_nFiles - 1);
           sram.readBlock(adr, szR, (byte*)&rnd);
           FillRandom(rnd);
         }
-        adr = nMaxAdr - szR - szStruct * m_nRandom;
+        adr = nMaxAdr - szR - uint32_t(szStruct) * m_nRandom;
         sram.readBlock(adr, szR, (byte*)&rnd);
         m_nRandom++;
       }
@@ -333,22 +305,27 @@ enum eVolMode { // A/B/C volume indicator mode:
 };
 
 static const int bufSize = 200;
-bool demoMode = false, randMode = true, bSwitchMeter = false;
+volatile bool demoMode = false;
+bool randMode = true;
+volatile bool displayDue = false;
 byte nVolMode = eVolChars;
 static const int demoLen = 10000, demoFadeLen = 500;
 SdFile fp;
-byte volumeA, volumeB, volumeC;
-uint16_t divA, divB, divC;
-byte playBuf[bufSize];
-bool playbackFinished = true;
-bool playbackSkip;
+volatile byte volumeA, volumeB, volumeC;
+volatile uint16_t divA, divB, divC;
+volatile byte playBuf[bufSize];
+volatile bool playbackFinished = true;
+enum TransportMode : byte { Playing, Paused, Stopped };
+volatile byte transportMode = Playing;
+byte ayRegisters[14] = {};
+bool restartRequested = false;
 int filesCount;
 int fileNum, fileNext = 0;
-int loadPos;
-int playPos;
-int skipCnt;
-int totalPos;
-float globalVolume;
+volatile byte loadPos = 0;
+volatile byte playPos = 0;
+uint16_t skipCnt = 0;
+uint32_t totalPos = 0;
+byte volumeScale = 255;
 
 void setupDisplay() {
   oled.begin(&Adafruit128x32, I2C_ADDRESS);
@@ -362,7 +339,7 @@ void setupTimer() { // 50 Hz
   TCCR1B = _BV(WGM12) | _BV(CS12);
   TIMSK1 = _BV(OCIE1A);
   TCNT1 = 0;
-  OCR1A = 1250;
+  OCR1A = F_CPU / 256 / 50 - 1;
   sei();
 }
 
@@ -382,15 +359,18 @@ void setup() {
   setupDisplay();
   setupShiftOut();
   setupShiftIn();
+  // Both SPI devices must be deselected before either is initialized.
+  digitalWrite(SD_CS_PIN, HIGH); pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SRAM_CS_PIN, HIGH); pinMode(SRAM_CS_PIN, OUTPUT);
   generateSeed();
-  setupTimer();
   fg.set(1780000); // set Timer4 for AY clock, pin #5 output mode is set inside
   resetAY();
   delay(500);
-  sram.begin();
   initSD();
   sled.SetOK(filesCount > 0);
-  loadRandomFile();
+  fileNum = restoreBookmark(EEPROM, files, filesCount, fname);
+  loadRandomFile(true);
+  setupTimer();
 }
 
 void generateSeed() {
@@ -425,7 +405,7 @@ unsigned int bitOut(void) {
 unsigned long seedOut(unsigned int noOfBits) {
   // return value with 'noOfBits' random bits set
   unsigned long seed = 0;
-  for (int i = 0; i < noOfBits; ++i)
+  for (unsigned int i = 0; i < noOfBits; ++i)
     seed = (seed << 1) | bitOut();
   return seed;
 }
@@ -441,7 +421,7 @@ void sendAY() {
 void resetAY() {
   volumeA = volumeB = volumeC = 0;
   divA = divB = divC = 0;
-  globalVolume = 1;
+  volumeScale = 255;
 
   bitClear(outHi, BIT_AY_BC1); // reset BC1
   bitClear(outHi, BIT_AY_BDIR); // reset BDIR
@@ -455,32 +435,38 @@ void resetAY() {
   for (int i = 0; i < 16; i++) writeAY(i, 0);
 }
 
-void setVolume(float volume) {
-  globalVolume = volume;
+void setVolume(byte scale) {
+  volumeScale = scale;
   writeAY(8, volumeA);
   writeAY(9, volumeB);
   writeAY(10, volumeC);
 }
 
-void writeAY(const byte port, byte data) { // write data to AY register
+void writeAY(const byte port, byte data) {
+  if (port < 14) ayRegisters[port] = data;
+  writeAYHardware(port, data);
+}
+
+void writeAYHardware(const byte port, byte data) { // write data to AY register
   if (port == 8 || port == 9 || port == 10) {
     if (port == 8) volumeA = data;
     if (port == 9) volumeB = data;
     if (port == 10) volumeC = data;
-    data = (byte)(data * globalVolume);
+    // Bit 4 selects the AY envelope; preserve it until fading begins.
+    if (volumeScale != 255) data = ((data & 16) ? 15 : (data & 15)) * uint16_t(volumeScale) / 255;
   }
   if (port == 0)
-    *((byte*)&divA) = data;
+    *((volatile byte*)&divA) = data;
   else if (port == 1)
-    *((byte*)&divA + 1) = data & 0xF;
+    *((volatile byte*)&divA + 1) = data & 0xF;
   else if (port == 2)
-    *((byte*)&divB) = data;
+    *((volatile byte*)&divB) = data;
   else if (port == 3)
-    *((byte*)&divB + 1) = data & 0xF;
+    *((volatile byte*)&divB + 1) = data & 0xF;
   else if (port == 4)
-    *((byte*)&divC) = data;
+    *((volatile byte*)&divC) = data;
   else if (port == 5)
-    *((byte*)&divC + 1) = data & 0xF;
+    *((volatile byte*)&divC + 1) = data & 0xF;
 
   bitClear(outHi, BIT_AY_BC1); // set zero to BC1, BDIR
   bitClear(outHi, BIT_AY_BDIR);
@@ -519,6 +505,8 @@ void initSD() {
     sled.SetOK(false);
     sd.initErrorHalt();
   }
+  sram.begin();
+  files.DetectSram();
   loadDirectory();
 }
 
@@ -527,12 +515,18 @@ void loadDirectory() {
   filesCount = files.getCount();
 }
 
-void loadRandomFile() {
-  if (randMode)
+void loadRandomFile(bool manual) {
+  if (filesCount < 1) return;
+  if (randMode && !manual)
     fileNum = files.getRandom();
   files.getFile(fileNum);
   SdFile file;
-  file.open(fname, O_READ);
+  if (!fname[0] || !file.open(fname, O_READ)) {
+    dispMsg("File open error");
+    sled.SetOK(false);
+    filesCount = 0;
+    return;
+  }
   fsize = file.fileSize();
   playFile(file);
 }
@@ -553,7 +547,7 @@ void showName(bool bSetCursor) {
   if (bSetCursor)
     oled.setCursor(0, 1);
   oled.print("File: ");
-  char buf[6]; sprintf(buf, "%d", fileNum + 1);
+  char buf[8]; sprintf(buf, "%d", fileNum + 1);
 #ifdef FREQ_TWO_ROWS
   if (nVolMode < eVolNotes) {
 #else
@@ -580,7 +574,7 @@ void showName(bool bSetCursor) {
 
 void showFile() {
   oled.clear();
-  if (nVolMode != eVolFullScreen) {
+  if (nVolMode != eVolFullScreen || transportMode != Playing) {
     showMode(false);
     showName(false);
   }
@@ -589,24 +583,34 @@ void showFile() {
 }
 
 void playFile(SdFile entry) {
+  // Called only while playback is stopped, so the ISR cannot touch the file state.
   fp.close();
   fp = entry;
-  loadPos = playPos = totalPos = floaded = 0;
-  showFile();
-  while (fp.available()) {
-    byte b = fp.read();
-    if (b == 0xFF) break;
+  loadPos = playPos = 0;
+  totalPos = floaded = 0;
+  skipCnt = 0;
+  if (fp.fileSize() < 16 || fp.read() != 'P' || fp.read() != 'S' ||
+      fp.read() != 'G' || fp.read() != 0x1A || !fp.seekSet(16)) {
+    dispMsg("Bad PSG header");
+    filesCount = 0;
+    sled.SetOK(false);
+    return;
   }
+  showFile();
+  while (loadNextByte()) {}
   playbackFinished = false;
 }
 
 bool loadNextByte() {
-  if (loadPos == playPos - 1 || loadPos == bufSize - 1 && playPos == 0)
-    return false;
+  byte next = loadPos + 1;
+  if (next == bufSize) next = 0;
+  if (next == playPos) return false;
   byte b = fp.available() ? fp.read() : 0xFD;
-  playBuf[loadPos++] = b;
-  if (loadPos == bufSize) loadPos = 0;
-  floaded++;
+  playBuf[loadPos] = b;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    loadPos = next;
+    floaded++;
+  }
   return true;
 }
 
@@ -623,101 +627,118 @@ byte getNextByte() {
 }
 
 void checkDemo() {
-  if (demoMode && totalPos >= demoLen && !playbackFinished) {
-    int demoPos = totalPos - demoLen;
-    setVolume(1.0 - demoPos / (float)demoFadeLen);
-    if (demoPos >= demoFadeLen) playbackFinished = true;
+  if (transportMode == Playing && demoMode && totalPos >= demoLen && !playbackFinished) {
+    uint32_t demoPos = totalPos - demoLen;
+    if (demoPos >= demoFadeLen) {
+      setVolume(0);
+      playbackFinished = true;
+    } else setVolume(255 - demoPos * 255 / demoFadeLen);
   }
 }
 
-void playNotes() {
+void pollButtons() {
+  static uint32_t lastPoll = 0;
+  const uint32_t now = millis();
+  if (uint32_t(now - lastPoll) < 5) return;
+  lastPoll = now;
   inBtn = in_165_byte();
-  btn78.CheckPress();
-  const byte n78 = btn78.Pressed();
-  if (BTN12_MASK == n78) // both buttons 7 and 8 pressed - switch volume indicator mode
-    bSwitchMeter = true;
-  else if (BTN2_MASK == n78) { // only button 8 pressed - switch demo mode
+  ButtonControls::Events events = buttons.update(inBtn, now);
+  static StopHold stopHold;
+  byte stopEvent = stopHold.update(buttons.pressedMask() & 0x20, now);
+  events.navigation &= ~0x20;
+  if (stopEvent == 1) events.navigation |= 0x20;
+  if (stopEvent == 2 && filesCount > 0) {
+    transportMode = Stopped;
+    playbackFinished = true;
+    muteAY();
+    storeBookmark(EEPROM, fileNum, fname);
+    oled.clear(); dispMsg("SAVED");
+  }
+  if (events.mode == 3) bSwitchMeter = true;
+  else if (events.mode == 2) {
     demoMode = !demoMode;
     showMode(true);
-    EEPROM.write(SAVE_DEMO_MODE, demoMode ? 1 : 0);
-  }
-  else if (BTN1_MASK == n78) { // only button 7 pressed - switch random/seq mode
+    EEPROM.update(SAVE_DEMO_MODE, demoMode ? 1 : 0);
+  } else if (events.mode == 1) {
     randMode = !randMode;
     showMode(true);
-    EEPROM.write(SAVE_RAND_MODE, randMode ? 1 : 0);
+    EEPROM.update(SAVE_RAND_MODE, randMode ? 1 : 0);
   }
-  bool bNextPressed = false;
-  if (btn1.Pressed()) {
-    fileNext = -1;
-    bNextPressed = true;
-  }
-  if (btn2.Pressed()) {
-    fileNext = 1;
-    bNextPressed = true;
-  }
-  if (btn3.Pressed()) {
-    fileNext = -5;
-    bNextPressed = true;
-  }
-  if (btn4.Pressed()) {
-    fileNext = 5;
-    bNextPressed = true;
-  }
-  if (btn5.Pressed()) {
-    fileNext = -10;
-    bNextPressed = true;
-  }
-  if (btn6.Pressed()) {
-    fileNext = 10;
-    bNextPressed = true;
-  }
-  if (bNextPressed)
-    playbackSkip = true;
-  else if (playbackSkip) {
-    playbackSkip = false;
-    playbackFinished = true;
-  }
-  if (playbackFinished || --skipCnt > 0)
-    return;
-  int oldPlayPos = playPos;
-  int oldTotalPos = totalPos;
-  while (isNextByteAvailable()) {
-    byte b = getNextByte();
-    if (b == 0xFF) {
-      break;
-    } else if (b == 0xFD) {
-      playbackFinished = true;
-      break;
-    } else if (b == 0xFE) {
-      if (isNextByteAvailable()) {
-        skipCnt = getNextByte();
-        skipCnt *= 4;
-        break;
-      }
-    } else if (b <= 0xFC) {
-      if (isNextByteAvailable()) {
-        byte v = getNextByte();
-        if (b < 16) writeAY(b, v);
-      }
+  if (events.navigation && filesCount > 0) {
+    if (events.navigation & 0x20) {
+      if (transportMode == Playing) {
+        transportMode = Stopped;
+        playbackFinished = true;
+        muteAY();
+      } else if (transportMode == Paused) resumePlayback();
+      else { restartRequested = true; transportMode = Playing; playbackFinished = true; fileNext = 0; }
+      showFile();
+    } else if (events.navigation & 0x10) {
+      if (transportMode == Playing) { transportMode = Paused; muteAY(); }
+      else if (transportMode == Paused) resumePlayback();
+      showFile();
     }
+    const int8_t steps[] = {-1, 1, -5, 5};
+    for (byte i = 0; i < 4; i++) {
+      if (events.navigation & (1 << i)) { fileNext = steps[i]; break; }
+    }
+    if (fileNext) playbackFinished = true;
   }
-  if (!isNextByteAvailable()) {
-    playPos = oldPlayPos;
-    totalPos = oldTotalPos;
+}
+
+void muteAY() {
+  writeAYHardware(7, 0x3F);
+  for (byte reg = 8; reg <= 10; reg++) writeAYHardware(reg, 0);
+}
+
+void resumePlayback() {
+  // The timer cannot consume commands until all saved output registers are restored.
+  for (byte reg = 7; reg <= 10; reg++) writeAYHardware(reg, ayRegisters[reg]);
+  transportMode = Playing;
+}
+
+void playNotes() {
+  if (playbackFinished || transportMode != Playing) return;
+  if (skipCnt) { --skipCnt; if (skipCnt) return; }
+  while (isNextByteAvailable()) {
+    byte b = playBuf[playPos];
+    // Never consume half a command or replay an already written frame.
+    if (b != 0xFF && b != 0xFD) {
+      byte available = (loadPos >= playPos) ? loadPos - playPos : bufSize - playPos + loadPos;
+      if (available < 2) return;
+    }
+    b = getNextByte();
+    if (b == 0xFF) return;
+    if (b == 0xFD) { playbackFinished = true; return; }
+    if (b == 0xFE) {
+      skipCnt = uint16_t(getNextByte()) * 4;
+      if (skipCnt) return;
+    } else {
+      byte value = getNextByte();
+      if (b < 16) writeAY(b, value);
+    }
   }
 }
 
 ISR(TIMER1_COMPA_vect) {
   sled.ShowStatus();
   playNotes();
-  displayOLED();
   checkDemo();
+  displayDue = true;
 }
 
 void displayOLED() {
-  if (playbackFinished) return;
-  if (nVolMode != eVolFullScreen) {
-    float fprc = (fsize > 0) ? 1000.0 * float(floaded) / float(fsize) : 0;
+  if (playbackFinished && transportMode == Playing) return;
+  byte volumeA, volumeB, volumeC;
+  uint16_t divA, divB, divC;
+  uint32_t loaded;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    volumeA = ::volumeA; volumeB = ::volumeB; volumeC = ::volumeC;
+    divA = ::divA; divB = ::divB; divC = ::divC;
+    loaded = floaded;
+  }
+  if (transportMode == Playing && nVolMode != eVolFullScreen) {
+    float fprc = (fsize > 0) ? 1000.0 * float(loaded) / float(fsize) : 0;
     int np = int(fprc + 0.5);
     if (np > 1000) np = 1000;
     sprintf(fperc, "%d.%d%%", np / 10, np % 10);
@@ -729,7 +750,7 @@ void displayOLED() {
     nVolMode++;
     if (nVolMode >= eVolTotal)
       nVolMode = eVolChars;
-    EEPROM.write(SAVE_VOL_MODE, nVolMode);
+    EEPROM.update(SAVE_VOL_MODE, nVolMode);
     if (nVolMode > eVolChars)
       oled.vreset();
     else
@@ -745,48 +766,51 @@ void displayOLED() {
 #endif
     }
   }
+  if (transportMode != Playing) {
+    static byte blink = 0;
+    if (++blink == 50) blink = 0;
+    oled.setCursor(0, 3);
+    if (blink < 25) oled.print(transportMode == Paused ? F("PAUSE") : F("STOP"));
+    oled.clearToEOL();
+    return;
+  }
   if (eVolBars == nVolMode)
     oled.drawVol(volumeA, volumeB, volumeC);
   else if (eVolNotes == nVolMode || eVolFullScreen == nVolMode)
     oled.drawFreq2(eVolFullScreen == nVolMode, volumeA, volumeB, volumeC, divA, divB, divC);
   else {
     oled.clrMeter(false);
-    oled.setCursor(32 + volumeA / 1.5, 3);
+    oled.setCursor(32 + volumeA * 2 / 3, 3);
     oled.print(">");
-    oled.setCursor((122 - volumeC / 1.5), 3);
+    oled.setCursor(122 - (volumeC * 2 + 2) / 3, 3);
     oled.print("<");
-    oled.setCursor((80 + volumeB / 1.5), 3);
+    oled.setCursor(80 + volumeB * 2 / 3, 3);
     oled.print("]");
-    oled.setCursor((75 - volumeB / 1.5), 3);
+    oled.setCursor(75 - (volumeB * 2 + 2) / 3, 3);
     oled.print("[");
   }
 }
 
 void loop() {
-  loadNextByte();
-  if (playbackFinished) {
+  pollButtons();
+  if (playbackFinished && (transportMode == Playing || fileNext)) {
+    if (filesCount < 1) return;
     resetAY();
-    if (fileNext != 0) {
-      fileNum += fileNext;
-      fileNext = 0;
-      if (fileNum < 0) {
-        fileNum += filesCount;
-        if (fileNum < 0)
-          fileNum = 0;
-      }
-      else if (fileNum >= filesCount) {
-        fileNum -= filesCount;
-        if (fileNum >= filesCount)
-          fileNum = filesCount - 1;
-      }
+    const bool manual = fileNext != 0;
+    const bool restart = restartRequested;
+    restartRequested = false;
+    const int32_t step = manual ? fileNext : 1;
+    fileNext = 0;
+    if (manual || (transportMode == Playing && !restart && !randMode)) {
+      fileNum = (int32_t(fileNum) + step) % filesCount;
+      if (fileNum < 0) fileNum += filesCount;
     }
-    else {
-      fileNum++;
-      if (fileNum >= filesCount)
-        fileNum = 0;
-    }
-    loadRandomFile();
+    loadRandomFile(manual || restart || transportMode != Playing);
   }
+  while (loadNextByte()) {}
+  bool refresh;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { refresh = displayDue; displayDue = false; }
+  if (refresh) displayOLED();
 }
 
 void out_595_word(byte lo, byte hi) {
@@ -811,13 +835,18 @@ void out_595_byte(byte x) {
 
 byte in_165_byte() {
   byte byteR = 0;
+  PBdigWL(IN_SHIFT_CLOCK_BIT);
   PBdigWL(IN_SHIFT_LATCH_BIT);
+  delayMicroseconds(1);
   PBdigWH(IN_SHIFT_LATCH_BIT);
+  delayMicroseconds(1);
   for (int i = 7; i >= 0; i--) { // read bit by bit 8 times
     if (bitRead(PINF, IN_SHIFT_DATA_BIT))
       bitSet(byteR, i); // read bit, insert it to byte
     PBdigWH(IN_SHIFT_CLOCK_BIT);
+    delayMicroseconds(1);
     PBdigWL(IN_SHIFT_CLOCK_BIT);
+    delayMicroseconds(1);
   }
   return byteR;
 }

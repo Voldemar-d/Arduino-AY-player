@@ -259,7 +259,7 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
     void drawMeter(byte vol, int8_t& _vol, byte pos) {
       if (vol > 15) vol = 15;
       if (vol == _vol) return;
-      byte nv = vol + 1, i; bool bErase = false;
+      byte nv = vol + 1, i = 0; bool bErase = false;
       if (_vol < 0)
         i = 0;
       else if (vol > _vol)
@@ -305,13 +305,13 @@ class SSD1306TextVol : public SSD1306AsciiAvrI2c {
         if (vmid == target)
           return mid;
         if (target > vmid) {
-          vmid1 = pgm_read_word(&note_div[mid - 1]);
+          vmid1 = mid > 0 ? pgm_read_word(&note_div[mid - 1]) : vmid;
           if (mid > 0 && target < vmid1)
             return getClosest(vmid1, mid - 1, vmid, mid, target);
           j = mid;
         }
         else {
-          vmid1 = pgm_read_word(&note_div[mid + 1]);
+          vmid1 = mid < n - 1 ? pgm_read_word(&note_div[mid + 1]) : vmid;
           if (mid < n - 1 && target > vmid1)
             return getClosest(vmid, mid, vmid1, mid + 1, target);
           i = mid + 1;
